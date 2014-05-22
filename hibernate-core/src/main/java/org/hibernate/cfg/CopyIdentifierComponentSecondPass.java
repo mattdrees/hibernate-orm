@@ -39,7 +39,8 @@ import org.hibernate.mapping.SimpleValue;
 /**
  * @author Emmanuel Bernard
  */
-public class CopyIdentifierComponentSecondPass implements SecondPass {
+public class CopyIdentifierComponentSecondPass implements DependentSecondPass {
+
 	private final String referencedEntityName;
 	private final Component component;
 	private final Mappings mappings;
@@ -208,5 +209,14 @@ public class CopyIdentifierComponentSecondPass implements SecondPass {
 			}
 		}
 		return property;
+	}
+
+	@Override
+	public boolean dependentUpon( SecondPass secondPass ) {
+		if ( secondPass instanceof CopyIdentifierComponentSecondPass ) {
+			CopyIdentifierComponentSecondPass other = (CopyIdentifierComponentSecondPass) secondPass;
+			return this.referencedEntityName.equals( other.component.getOwner().getEntityName() );
+		}
+		return false;
 	}
 }
