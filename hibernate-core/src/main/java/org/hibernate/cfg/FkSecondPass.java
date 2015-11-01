@@ -5,15 +5,17 @@
  * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
  */
 package org.hibernate.cfg;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.hibernate.mapping.PersistentClass;
 import org.hibernate.mapping.SimpleValue;
 import org.hibernate.mapping.Value;
 
 /**
  * @author Emmanuel Bernard
  */
-public abstract class FkSecondPass implements SecondPass {
+public abstract class FkSecondPass implements DependentSecondPass {
 	protected SimpleValue value;
 	protected Ejb3JoinColumn[] columns;
 	/**
@@ -58,5 +60,18 @@ public abstract class FkSecondPass implements SecondPass {
 
 	public abstract boolean isInPrimaryKey();
 
+	@Override
+	public boolean dependentUpon(SecondPass secondPass, Map<String, PersistentClass> persistentClasses) {
+		if (! (secondPass instanceof FkSecondPass) ) {
+			return false;
+		}
+		FkSecondPass other = (FkSecondPass) secondPass;
+		final String referenceEntityName = this.getReferencedEntityName();
+		final PersistentClass classMapping = persistentClasses.get( referenceEntityName );
+		final String table = classMapping.getTable().getQualifiedTableName().render();
+
+		String otherTable = other.getValue().getTable().getQualifiedTableName().render();
+		return table.equals( otherTable );
+	}
 
 }

@@ -208,7 +208,7 @@ public class CopyIdentifierComponentSecondPass implements DependentSecondPass {
 	}
 
 	@Override
-	public boolean dependentUpon( SecondPass secondPass ) {
+	public boolean dependentUpon(SecondPass secondPass, Map<String, PersistentClass> persistentClasses) {
 		if ( secondPass instanceof CopyIdentifierComponentSecondPass ) {
 			CopyIdentifierComponentSecondPass other = (CopyIdentifierComponentSecondPass) secondPass;
 			return this.referencedEntityName.equals( other.component.getOwner().getEntityName() );

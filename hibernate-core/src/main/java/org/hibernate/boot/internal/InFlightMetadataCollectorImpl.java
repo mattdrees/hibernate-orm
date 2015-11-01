@@ -1655,7 +1655,7 @@ public class InFlightMetadataCollectorImpl implements InFlightMetadataCollector 
 			searchForIndependent:
 			for ( DependentSecondPass pass : toSort ) {
 				for ( DependentSecondPass other : toSort ) {
-					if (pass.dependentUpon( other )) {
+					if (pass.dependentUpon( other, entityBindingMap )) {
 						continue searchForIndependent;
 					}
 				}
@@ -1663,7 +1663,7 @@ public class InFlightMetadataCollectorImpl implements InFlightMetadataCollector 
 				break;
 			}
 			if (independent == null) {
-				throw new MappingException( "cyclic dependency in derived identities" );
+				throw new MappingException( "cyclic dependency in foreign keys or derived identities" );
 			}
 			toSort.remove( independent );
 			sorted.add( independent );
@@ -1677,77 +1677,25 @@ public class InFlightMetadataCollectorImpl implements InFlightMetadataCollector 
 		}
 
 		// split FkSecondPass instances into primary key and non primary key FKs.
-		// While doing so build a map of class names to FkSecondPass instances depending on this class.
-		Map<String, Set<FkSecondPass>> isADependencyOf = new HashMap<String, Set<FkSecondPass>>();
 		List<FkSecondPass> endOfQueueFkSecondPasses = new ArrayList<FkSecondPass>( fkSecondPassList.size() );
+		List<FkSecondPass> primaryKeyFkSecondPasses = new ArrayList<FkSecondPass>( fkSecondPassList.size() );
 		for ( FkSecondPass sp : fkSecondPassList ) {
 			if ( sp.isInPrimaryKey() ) {
-				final String referenceEntityName = sp.getReferencedEntityName();
-				final PersistentClass classMapping = getEntityBinding( referenceEntityName );
-				final String dependentTable = classMapping.getTable().getQualifiedTableName().render();
-				if ( !isADependencyOf.containsKey( dependentTable ) ) {
-					isADependencyOf.put( dependentTable, new HashSet<FkSecondPass>() );
-				}
-				isADependencyOf.get( dependentTable ).add( sp );
+				primaryKeyFkSecondPasses.add( sp );
 			}
 			else {
 				endOfQueueFkSecondPasses.add( sp );
 			}
 		}
 
-		// using the isADependencyOf map we order the FkSecondPass recursively instances into the right order for processing
-		List<FkSecondPass> orderedFkSecondPasses = new ArrayList<FkSecondPass>( fkSecondPassList.size() );
-		for ( String tableName : isADependencyOf.keySet() ) {
-			buildRecursiveOrderedFkSecondPasses( orderedFkSecondPasses, isADependencyOf, tableName, tableName );
-		}
-
-		// process the ordered FkSecondPasses
-		for ( FkSecondPass sp : orderedFkSecondPasses ) {
+		// order & process the FkSecondPasses
+		for ( SecondPass sp : sortSecondPassesByDependencies( primaryKeyFkSecondPasses ) ) {
 			sp.doSecondPass( getEntityBindingMap() );
 		}
 
 		processEndOfQueue( endOfQueueFkSecondPasses );
 
 		fkSecondPassList.clear();
-	}
-
-	/**
-	 * Recursively builds a list of FkSecondPass instances ready to be processed in this order.
-	 * Checking all dependencies recursively seems quite expensive, but the original code just relied
-	 * on some sort of table name sorting which failed in certain circumstances.
-	 * <p/>
-	 * See <tt>ANN-722</tt> and <tt>ANN-730</tt>
-	 *
-	 * @param orderedFkSecondPasses The list containing the <code>FkSecondPass<code> instances ready
-	 * for processing.
-	 * @param isADependencyOf Our lookup data structure to determine dependencies between tables
-	 * @param startTable Table name to start recursive algorithm.
-	 * @param currentTable The current table name used to check for 'new' dependencies.
-	 */
-	private void buildRecursiveOrderedFkSecondPasses(
-			List<FkSecondPass> orderedFkSecondPasses,
-			Map<String, Set<FkSecondPass>> isADependencyOf,
-			String startTable,
-			String currentTable) {
-
-		Set<FkSecondPass> dependencies = isADependencyOf.get( currentTable );
-
-		// bottom out
-		if ( dependencies == null || dependencies.size() == 0 ) {
-			return;
-		}
-
-		for ( FkSecondPass sp : dependencies ) {
-			String dependentTable = sp.getValue().getTable().getQualifiedTableName().render();
-			if ( dependentTable.compareTo( startTable ) == 0 ) {
-				String sb = "Foreign key circularity dependency involving the following tables: ";
-				throw new AnnotationException( sb );
-			}
-			buildRecursiveOrderedFkSecondPasses( orderedFkSecondPasses, isADependencyOf, startTable, dependentTable );
-			if ( !orderedFkSecondPasses.contains( sp ) ) {
-				orderedFkSecondPasses.add( 0, sp );
-			}
-		}
 	}
 
 	private void processEndOfQueue(List<FkSecondPass> endOfQueueFkSecondPasses) {
